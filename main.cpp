@@ -8,7 +8,7 @@ int main()
 
     InitWindow(windowWidth, windowHeight, "RPG Clasher");
 
-    Texture2D worldMap = LoadTexture("nature_tileset/workldmap.png");
+    Texture2D worldMap = LoadTexture("nature_tileset/worldMap.png");
 
     SetTargetFPS(180);
     while (!WindowShouldClose())
