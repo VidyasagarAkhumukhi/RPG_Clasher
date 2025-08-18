@@ -1,109 +1,141 @@
+// Main entry for the simple RPG Clasher demo.
+// - Loads a tiled world map, spawns props and enemies in world coordinates.
+// - Keeps the player (knight) centered on screen and moves the world underneath.
+// - Handles input, rendering, simple collisions and a basic attack.
+
 #include "raylib.h"
 #include "raymath.h"
-
-class Character
-{
-public:
-    Vector2 getWorldPos() { return worldPos; }
-    void setScreenPos(int winWidth, int winHeight);
-    void tick(float deltaTime);
-
-private:
-    Texture2D texture{LoadTexture("characters/knight_idle_spritesheet.png")};
-    Texture2D idle{LoadTexture("characters/knight_idle_spritesheet.png")};
-    Texture2D run{LoadTexture("characters/knight_run_spritesheet.png")};
-    Vector2 screenPos;
-    Vector2 worldPos;
-    // direction knight is facing. -1 = left, 1 = right
-    float rightLeft{1.0f};
-    // animation variables
-    float runningTime{};
-    int frame{};
-    const int maxFrames{6};
-    const float updateTime{1.0f / 12.0f};
-    // speed used to scale the movement of map
-    const float speed{3.0};
-};
-
-void Character::setScreenPos(int winWidth, int winHeight)
-{
-    screenPos = {
-        (float)winWidth / 2.0f - (4.0f * (0.5f * (float)texture.width / 6.0f)),
-        (float)winHeight / 2.0f - (4.0f * (0.5f * (float)texture.height))};
-}
-
-void Character::tick(float deltaTime)
-{
-    // Direction of movement
-    Vector2 direction{};
-    if (IsKeyDown(KEY_A))
-        direction.x -= 1.0;
-    if (IsKeyDown(KEY_D))
-        direction.x += 1;
-    if (IsKeyDown(KEY_W))
-        direction.y -= 1;
-    if (IsKeyDown(KEY_S))
-        direction.y += 1;
-
-    // normalizing the length of direction and calculating the new position of worldMapPos and changing it as per the keys downed
-    if (Vector2Length(direction) != 0)
-    {
-        // calculating the new position and scaling the speed
-        // set worldMapPos = worldMapPos + direction
-        worldPos = Vector2Add(worldPos, Vector2Scale(Vector2Normalize(direction), speed));
-        // left right value allocation
-        (direction.x < 0.0f) ? rightLeft = -1.0f : rightLeft = 1.0f;
-        // changing the textures for knight if he is moving
-        texture = run;
-    }
-    else
-        texture = idle;
-
-    // updating animation frames for knight
-    runningTime += deltaTime;
-    if (runningTime >= updateTime)
-    {
-        frame++;
-        runningTime = 0.f;
-        if (frame > maxFrames)
-            frame = 0;
-    }
-
-    // drawing the knight
-    Rectangle source{frame * ((float)texture.width / 6.0f), 0.f, rightLeft * (float)texture.width / 6.0f, (float)texture.height};
-    Rectangle dest{screenPos.x, screenPos.y, 4.5f * (float)texture.width / 6.0f, 4.5f * (float)texture.height};
-    DrawTexturePro(texture, source, dest, Vector2{}, 0.0f, WHITE);
-}
+#include "Character.h"
+#include "Prop.h"
+#include "Enemy.h"
+#include <string>
 
 int main()
 {
-
-    const int windowWidth{1920};
-    const int windowHeight{1080};
-
+    const int windowWidth{384};
+    const int windowHeight{384};
     InitWindow(windowWidth, windowHeight, "RPG Clasher");
 
-    // Loading the background worldMap
-    Texture2D worldMap = LoadTexture("nature_tileset/worldMap.png");
-    Vector2 worldMapPos{0.0, 0.0};
+    // Load the large world map texture. The world is drawn scaled by `mapScale`.
+    // We compute `mapPos` each frame from the character world position so the
+    // knight appears centered while the map moves under the player.
+    Texture2D map = LoadTexture("nature_tileset/worldMap.png");
+    Vector2 mapPos{0.0, 0.0};
+    const float mapScale{4.0f};
 
-    // an instance of character class, knight
-    Character knight{};
-    // calling setScreenPos fuc to update winWidth and winHeight
-    knight.setScreenPos(windowWidth, windowHeight);
+    // Create the player character. The character stores its world position
+    // (in world units) and a screen position (keeps the knight centered).
+    Character knight{windowWidth, windowHeight};
 
-    SetTargetFPS(180);
+    // Props are static world objects (rocks, logs). Their `worldPos` is in
+    // world coordinates; when rendering we subtract the knight world pos to
+    // get a screen position.
+    Prop props[7]{
+        Prop{Vector2{600.f, 300.f}, LoadTexture("nature_tileset/Rock.png")},
+        Prop{Vector2{1200.f, 1200.f}, LoadTexture("nature_tileset/Rock.png")},
+        Prop{Vector2{1500.f, 700.f}, LoadTexture("nature_tileset/Log.png")},
+        Prop{Vector2{1750.f, 600.f}, LoadTexture("nature_tileset/Rock.png")},
+        Prop{Vector2{1000.f, 400.f}, LoadTexture("nature_tileset/Rock.png")},
+        Prop{Vector2{1670.f, 900.f}, LoadTexture("nature_tileset/Log.png")},
+        Prop{Vector2{400.f, 500.f}, LoadTexture("nature_tileset/Log.png")}};
+
+    // Create simple enemies with idle/run textures. They will be given a
+    // pointer to the player as a target so they can follow or interact.
+    Enemy goblin{
+        Vector2{800.f, 300.f},
+        LoadTexture("characters/goblin_idle_spritesheet.png"),
+        LoadTexture("characters/goblin_run_spritesheet.png")};
+
+    Enemy slime{
+        Vector2{500.f, 700.f},
+        LoadTexture("characters/slime_idle_spritesheet.png"),
+        LoadTexture("characters/slime_run_spritesheet.png")};
+
+    Enemy *enemies[]{
+        &goblin,
+        &slime};
+
+    // Tell each enemy which character to target.
+    for (auto enemy : enemies)
+    {
+        enemy->setTarget(&knight);
+    }
+
+    SetTargetFPS(60);
     while (!WindowShouldClose())
     {
         BeginDrawing();
         ClearBackground(WHITE);
 
-        // getting the characters worldPos and flipping it to negative by multiplying it to -1.0f
-        worldMapPos = Vector2Scale(knight.getWorldPos(), -1.f);
+        // Compute map position so the knight remains centered. worldPos is
+        // in world units; multiplying by -1 flips the map so the player stays
+        // visually in the middle of the screen.
+        mapPos = Vector2Scale(knight.getWorldPos(), -1.f);
 
-        // drawing the map
-        DrawTextureEx(worldMap, worldMapPos, 0.0, 7.0, WHITE);
+        // Draw the map (scaled). All world objects will be drawn relative to
+        // the knight's world position so they line up with the map.
+        DrawTextureEx(map, mapPos, 0.0, 4.0, WHITE);
+
+        // Draw props (rocks/logs) in screen space relative to the knight.
+        for (auto prop : props)
+        {
+            prop.Render(knight.getWorldPos());
+        }
+
+        // If player is dead show Game Over and skip rest of frame logic.
+        if (!knight.getAlive()) // Character is not alive
+        {
+            DrawText("Game Over!", 55.f, 45.f, 40, RED);
+            EndDrawing();
+            continue;
+        }
+        else // Character is alive
+        {
+            std::string knightsHealth = "Health: ";
+            knightsHealth.append(std::to_string(knight.getHealth()), 0, 5);
+            DrawText(knightsHealth.c_str(), 55.f, 45.f, 40, RED);
+        }
+
+        // Update player logic (movement, animation, weapon drawing).
         knight.tick(GetFrameTime());
+
+        // Check world bounds so the player can't move the camera outside map.
+        if (knight.getWorldPos().x < 0.f ||
+            knight.getWorldPos().y < 0.f ||
+            knight.getWorldPos().x + windowWidth > map.width * mapScale ||
+            knight.getWorldPos().y + windowHeight > map.height * mapScale)
+        {
+            knight.undoMovement();
+        }
+        // Check collisions between the player's collision rect (screen) and
+        // each prop's collision rect (also returned in screen-space). If a
+        // collision occurs we undo the player's last movement.
+        for (auto prop : props)
+        {
+            if (CheckCollisionRecs(prop.getCollisionRec(knight.getWorldPos()), knight.getCollisionRec()))
+            {
+                knight.undoMovement();
+            }
+        }
+
+        // Update enemies (simple AI/ticking).
+        for (auto enemy : enemies)
+        {
+            enemy->tick(GetFrameTime());
+        }
+
+        // On mouse click, check weapon collision against enemies and kill any
+        // enemy hit by the weapon hitbox.
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+        {
+            for (auto enemy : enemies)
+            {
+                if (CheckCollisionRecs(enemy->getCollisionRec(), knight.getWeaponCollisionRec()))
+                {
+                    enemy->setAlive(false);
+                }
+            }
+        }
 
         EndDrawing();
     }
