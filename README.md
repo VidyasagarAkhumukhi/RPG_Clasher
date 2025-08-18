@@ -2,10 +2,10 @@
 
 RPG Clasher is a classic top-down 2D Action RPG demo built from the ground up in C++ using the Raylib library. It showcases a clean, object-oriented design for managing characters, enemies, and world objects. The game features a scrolling world camera that keeps the player centered, a simple but effective combat system, and animated characters.
 
-![gameplay-gif-placeholder](https://i.imgur.com/8Qe8L67.png)
-*(This is a placeholder. Consider replacing it with a GIF of your actual gameplay!)*
 
----
+
+![Dasher Gameplay](https://github.com/user-attachments/assets/fd005422-967b-4b4c-a935-b8993654cd38)
+
 
 ## 🎮 Gameplay & Controls
 
